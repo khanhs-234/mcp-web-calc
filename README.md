@@ -38,7 +38,7 @@ Tạo/chỉnh file cấu hình MCP của LM Studio:
   "mcpServers": {
     "mcp-web-calc": {
       "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/mcp-mcp-web-calc/dist/src/server.js"],
+      "args": ["/ABSOLUTE/PATH/TO/mcp-web-calc/dist/src/server.js"],
       "env": {
         "USER_AGENT": "mcp-universal-tools/0.1",
         "HTTP_TIMEOUT": "15000",
@@ -98,9 +98,16 @@ Mở LM Studio → **Tools** → bật **mcp-web-calc**.
 - Playwright được tối ưu để nhẹ: chặn ảnh/phông/media; chỉ bật khi cần.  
 - Nếu gặp CAPTCHA, giảm tần suất hoặc thử lại sau vài phút.
 
+## Khắc phục sự cố
+- **Playwright báo thiếu Chromium**: chạy `npx playwright install chromium`.
+- **CAPTCHA / chặn tạm thời**: giảm tần suất tìm, dùng `mode="fast"` hoặc thử lại sau vài phút.
+- **Linux thiếu lib**: dùng `npx playwright install --with-deps chromium`.
+- **Timeout khi tóm tắt URL**: trang quá nặng hoặc chặn; thử `fetch_url` trước, hoặc tăng `HTTP_TIMEOUT`.
+
 ## Giấy phép
 Phát hành theo giấy phép MIT. Xem tệp `LICENSE`.
 
+## Ủng hộ
+Nếu bạn thấy dự án hữu ích, bạn có thể ủng hộ mình qua PayPal:
 
-## Gợi ý topics (đặt trên GitHub)
-- `lmstudio`, `mcp`, `modelcontextprotocol`, `mcp-server`, `web-search`, `wikipedia`, `readability`, `playwright`, `no-api`, `typescript`, `calculator`, `math`, `mathjs`
+[![Donate PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/paypalme/pooseart)
