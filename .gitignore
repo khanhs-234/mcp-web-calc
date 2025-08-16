@@ -1,0 +1,15 @@
+# Node
+node_modules
+dist
+.env
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Playwright
+playwright-report
+test-results
+
+# OS
+.DS_Store
+Thumbs.db
