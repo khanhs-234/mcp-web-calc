@@ -1,11 +1,13 @@
+// src/engines.ts
+// Search engine helpers for mcp-web-calc
+// - Fix relative links from DuckDuckGo HTML by setting a base URL in JSDOM
+// - Defensive URL parsing in mergeDedupe
+// - Modes: fast (DDG HTML), deep (Bing via Playwright), auto (fast → escalate)
+
 import { JSDOM } from "jsdom";
-import { chromium, Browser, BrowserContext, Page } from "playwright";
 
-const DEFAULT_TIMEOUT = Number(process.env.HTTP_TIMEOUT ?? 15000);
-const DEFAULT_LANG = process.env.LANG_DEFAULT ?? "vi";
-const FAST_TIME_BUDGET = Number(process.env.FAST_TIME_BUDGET_MS ?? 1800);
-
-export type EngineName = "ddg_html" | "bing_playwright" | "brave_playwright" | "google_playwright";
+export type SearchMode = "fast" | "deep" | "auto";
+export type EngineName = "ddg_html" | "bing_pw";
 
 export interface SearchItem {
   title: string;
@@ -14,123 +16,150 @@ export interface SearchItem {
   source: EngineName;
 }
 
-export interface SearchDiagnostics {
-  elapsedMs: number;
-  engine: EngineName;
-  note?: string;
-}
+const UA =
+  process.env.USER_AGENT ||
+  "mcp-web-calc/0.1 (+https://github.com/khanhs-234/mcp-web-calc)";
+const HTTP_TIMEOUT = Number(process.env.HTTP_TIMEOUT || 15000);
+const FAST_TIME_BUDGET_MS = Number(process.env.FAST_TIME_BUDGET_MS || 1800);
+const MAX_RESULTS = Number(process.env.MAX_RESULTS || 5);
 
-export function uaHeaders() {
-  const ua = process.env.USER_AGENT || "mcp-universal-tools/0.1";
-  const lang = DEFAULT_LANG;
-  return { "User-Agent": ua, "Accept-Language": lang === "vi" ? "vi-VN,vi;q=0.9,en;q=0.8" : "en-US,en;q=0.9" } as Record<string, string>;
+function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
+function makeAbortableTimeout(ms: number) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort("timeout"), ms);
+  return { ctrl, cancel: () => clearTimeout(id) };
 }
-
-async function getText(url: string, abort: AbortSignal): Promise<string> {
-  const res = await fetch(url, { signal: abort, headers: uaHeaders() });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return await res.text();
+function langHeader(lang?: string) {
+  if (!lang) return undefined;
+  return `${lang};q=1.0, en;q=0.8`;
 }
-
-// -------------------- FAST: DuckDuckGo HTML (no playwright) --------------------
-export async function ddgHtmlSearch(q: string, num = 5, abort: AbortSignal): Promise<{ items: SearchItem[]; diag: SearchDiagnostics; }> {
-  const start = Date.now();
+function ddgBaseURL(query: string, lang?: string) {
   const u = new URL("https://html.duckduckgo.com/html/");
-  u.searchParams.set("q", q);
-  const html = await getText(u.toString(), abort);
-  const dom = new JSDOM(html);
-  const doc = dom.window.document;
-  const items: SearchItem[] = [];
-  for (const res of Array.from(doc.querySelectorAll("div.result")).slice(0, num)) {
-    const a = res.querySelector("a.result__a") as HTMLAnchorElement | null;
-    const snippet = res.querySelector(".result__snippet")?.textContent?.trim();
-    if (a && a.href) items.push({ title: (a.textContent || a.href).trim(), url: a.href, snippet, source: "ddg_html" });
-  }
-  return { items, diag: { elapsedMs: Date.now() - start, engine: "ddg_html" } };
+  u.searchParams.set("q", query);
+  if (lang) u.searchParams.set("kl", `${lang}-${lang}`);
+  return u;
 }
 
-// -------------------- DEEP: Playwright engines (Bing primary) --------------------
-class BrowserManager {
-  private static _instance: BrowserManager | null = null;
-  private browser?: Browser;
-  private context?: BrowserContext;
-  private readyPromise?: Promise<void>;
+/** FAST: HTML DuckDuckGo (không Playwright) */
+export async function ddgHtmlSearch(
+  query: string,
+  num = MAX_RESULTS,
+  lang?: string,
+  timeBudgetMs = FAST_TIME_BUDGET_MS
+): Promise<SearchItem[]> {
+  const base = ddgBaseURL(query, lang);
+  const { ctrl, cancel } = makeAbortableTimeout(
+    Math.min(timeBudgetMs, HTTP_TIMEOUT)
+  );
 
-  static instance() {
-    if (!this._instance) this._instance = new BrowserManager();
-    return this._instance;
-  }
-
-  async ensureLaunched() {
-    if (this.readyPromise) return this.readyPromise;
-    this.readyPromise = (async () => {
-      if (!this.browser) {
-        this.browser = await chromium.launch({ headless: true, args: ["--disable-dev-shm-usage"] });
-        this.context = await this.browser.newContext({
-          viewport: { width: 1280, height: 900 },
-          locale: DEFAULT_LANG === "vi" ? "vi-VN" : "en-US",
-          timezoneId: "Asia/Ho_Chi_Minh",
-          userAgent: uaHeaders()["User-Agent"]
-        });
-        this.context.setDefaultTimeout(DEFAULT_TIMEOUT);
-        // Block heavy resources
-        await this.context.route("**/*", (route) => {
-          const type = route.request().resourceType();
-          if (type === "image" || type === "media" || type === "font" || type === "websocket") {
-            return route.abort();
-          }
-          return route.continue();
-        });
-      }
-    })();
-    return this.readyPromise;
-  }
-
-  async newPage(): Promise<Page> {
-    await this.ensureLaunched();
-    if (!this.context) throw new Error("Context not ready");
-    const page = await this.context.newPage();
-    await page.setExtraHTTPHeaders(uaHeaders());
-    return page;
-  }
-}
-
-export async function bingPlaywrightSearch(q: string, num = 5): Promise<{ items: SearchItem[]; diag: SearchDiagnostics; }> {
-  const start = Date.now();
-  const mgr = BrowserManager.instance();
-  await mgr.ensureLaunched();
-  const page = await mgr.newPage();
   try {
-    const url = "https://www.bing.com/search?q=" + encodeURIComponent(q);
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: DEFAULT_TIMEOUT });
-    const items = await page.evaluate((max: number) => {
-      function sel<T extends Element>(root: ParentNode, s: string): T | null { return root.querySelector(s) as any; }
-      const out: { title: string; url: string; snippet?: string; source: string; }[] = [];
-      const blocks = Array.from(document.querySelectorAll("#b_results > li.b_algo"));
-      for (const b of blocks) {
-        const a = sel<HTMLAnchorElement>(b, "h2 a");
-        if (!a || !a.href) continue;
-        const t = a.textContent?.trim() || a.href;
-        const sn = sel<HTMLElement>(b, "p")?.textContent?.trim();
-        out.push({ title: t, url: a.href, snippet: sn, source: "bing_playwright" });
-        if (out.length >= max) break;
+    const res = await fetch(base.toString(), {
+      method: "GET",
+      signal: ctrl.signal,
+      headers: {
+        "User-Agent": UA,
+        "Accept-Language": langHeader(lang) || "",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+    const html = await res.text();
+
+    // Set base URL để href tương đối → tuyệt đối
+    const dom = new JSDOM(html, { url: base.toString() });
+    const doc = dom.window.document;
+
+    const items: SearchItem[] = [];
+    const nodes = Array.from(doc.querySelectorAll("div.result, .web-result"));
+
+    for (const node of nodes.slice(0, num * 2)) {
+      const a =
+        (node.querySelector("a.result__a") as HTMLAnchorElement | null) ||
+        (node.querySelector("a[href]") as HTMLAnchorElement | null);
+      if (!a) continue;
+
+      let abs: string;
+      try {
+        const href = a.getAttribute("href") || "";
+        abs = new URL(href, base).toString();
+      } catch { continue; }
+
+      const title = (a.textContent || abs).trim();
+      const snippet =
+        node.querySelector(".result__snippet")?.textContent?.trim() ||
+        node.querySelector(".result__snippet.js-result-snippet")
+          ?.textContent?.trim() ||
+        node.textContent?.trim();
+
+      items.push({ title, url: abs, snippet, source: "ddg_html" });
+      if (items.length >= num) break;
+    }
+
+    return items;
+  } finally {
+    cancel();
+  }
+}
+
+/** DEEP: Bing qua Playwright (Chromium) */
+export async function deepSearchWithPlaywright(
+  query: string,
+  num = MAX_RESULTS,
+  lang?: string
+): Promise<SearchItem[]> {
+  let chromium: any;
+  try {
+    chromium = (await import("playwright")).chromium;
+  } catch {
+    throw new Error("Playwright is not installed. Run: npx playwright install chromium");
+  }
+
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const ctx = await browser.newContext({ userAgent: UA, locale: lang || "en-US" });
+    const page = await ctx.newPage();
+
+    const u = new URL("https://www.bing.com/search");
+    u.searchParams.set("q", query);
+    if (lang) u.searchParams.set("setLang", lang);
+    await page.goto(u.toString(), { waitUntil: "domcontentloaded", timeout: HTTP_TIMEOUT });
+    await sleep(200);
+
+    const items: SearchItem[] = await page.evaluate((limit: number) => {
+      const out: { title: string; url: string; snippet?: string; source: "bing_pw" }[] = [];
+      const cards = Array.from(document.querySelectorAll("li.b_algo"));
+      for (const c of cards) {
+        const a = c.querySelector<HTMLAnchorElement>("h2 a, a[href]");
+        if (!a) continue;
+        const url = a.getAttribute("href") || "";
+        const title = (a.textContent || url).trim();
+        const snippet =
+          c.querySelector(".b_caption p")?.textContent?.trim() ||
+          c.textContent?.trim();
+        if (url) out.push({ title, url, snippet, source: "bing_pw" });
+        if (out.length >= limit) break;
       }
       return out;
     }, num);
-    return { items: items as SearchItem[], diag: { elapsedMs: Date.now() - start, engine: "bing_playwright" } };
+
+    return items;
   } finally {
-    await page.close();
+    await browser.close();
   }
 }
 
-// (Optional) Brave / Google could be added similarly; default to Bing for stability.
-// Simple merge & dedupe
+/** Gộp & khử trùng lặp theo origin+pathname (parse URL an toàn) */
 export function mergeDedupe(lists: SearchItem[][], limit: number): SearchItem[] {
   const seen = new Set<string>();
   const out: SearchItem[] = [];
+
   for (const list of lists) {
     for (const it of list) {
-      const key = new URL(it.url).origin + new URL(it.url).pathname;
+      let key = it.url;
+      try {
+        const u = new URL(it.url);
+        key = `${u.origin}${u.pathname}`;
+      } catch { /* giữ nguyên */ }
+
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(it);
@@ -140,69 +169,106 @@ export function mergeDedupe(lists: SearchItem[][], limit: number): SearchItem[] 
   return out;
 }
 
-// Heuristics to decide if fast results are "good enough"
-export function shouldEscalate(query: string, fastItems: SearchItem[], minResults = 5): boolean {
-  const q = query.toLowerCase();
-  const timeSignals = ["mới", "hôm nay", "latest", "breaking", "update", "cập nhật", String(new Date().getFullYear())];
-  if (timeSignals.some(s => q.includes(s))) return true;
-  if (fastItems.length < minResults) return true;
-  // domain diversity
-  const domains = new Set<string>();
-  let withSnippet = 0;
-  for (const it of fastItems) {
-    try {
-      const u = new URL(it.url);
-      domains.add(u.hostname.replace(/^www\./, ""));
-    } catch {}
-    if (it.snippet && it.snippet.length > 30) withSnippet++;
-  }
-  if (domains.size < 3) return true;
-  if (withSnippet < 3) return true;
+/** Heuristic quyết định có escalate hay không */
+export function shouldEscalate(items: SearchItem[], desired: number): boolean {
+  const min = Math.min(desired, 3);
+  if (items.length < min) return true;
+  const weak = items.every((x) => (x.title || "").length < 4);
+  if (weak) return true;
+  const domains = items.map((x) => { try { return new URL(x.url).host; } catch { return x.url; }});
+  const uniq = new Set(domains);
+  if (uniq.size <= Math.ceil(items.length / 3)) return true;
   return false;
 }
 
-// Orchestrator
-export async function runTwoTierSearch(query: string, mode: "auto" | "fast" | "deep", limit = 5): Promise<{ items: SearchItem[]; modeUsed: string; enginesUsed: EngineName[]; escalated: boolean; diagnostics: SearchDiagnostics[]; }> {
-  const diagnostics: SearchDiagnostics[] = [];
-  const enginesUsed: EngineName[] = [];
-  const controller = new AbortController();
-  let fastItems: SearchItem[] = [];
+/** Report trả về đúng như server.ts đang dùng */
+export interface SearchReport {
+  items: SearchItem[];
+  modeUsed: SearchMode;
+  enginesUsed: EngineName[];
+  escalated: boolean;
+  diagnostics: {
+    fastCount?: number;
+    deepCount?: number;
+    timeBudgetMs?: number;
+  };
+}
+
+/** Hàm được server.ts gọi: runTwoTierSearch(query, mode?, limit?) */
+export async function runTwoTierSearch(
+  query: string,
+  mode: SearchMode = "auto",
+  limit: number = MAX_RESULTS
+): Promise<SearchReport> {
+  let enginesUsed: EngineName[] = [];
+  let items: SearchItem[] = [];
   let escalated = false;
 
-  if (mode === "fast" || mode === "auto") {
-    // time budget for fast
-    const t = setTimeout(() => controller.abort(), FAST_TIME_BUDGET).unref();
-    try {
-      const { items, diag } = await ddgHtmlSearch(query, Math.min(10, Math.max(limit, 5)), controller.signal);
-      diagnostics.push(diag);
-      enginesUsed.push("ddg_html");
-      fastItems = items;
-    } catch (e) {
-      diagnostics.push({ elapsedMs: FAST_TIME_BUDGET, engine: "ddg_html", note: "timeout/error" });
-      fastItems = [];
-    } finally {
-      clearTimeout(t);
-    }
+  if (!query || !query.trim()) {
+    return { items: [], modeUsed: mode, enginesUsed: [], escalated: false, diagnostics: {} };
   }
 
   if (mode === "fast") {
-    return { items: fastItems.slice(0, limit), modeUsed: "fast", enginesUsed, escalated: false, diagnostics };
+    items = await ddgHtmlSearch(query, limit, process.env.LANG_DEFAULT);
+    enginesUsed = ["ddg_html"];
+    return {
+      items,
+      modeUsed: "fast",
+      enginesUsed,
+      escalated: false,
+      diagnostics: { fastCount: items.length, timeBudgetMs: FAST_TIME_BUDGET_MS }
+    };
   }
 
-  let finalItems: SearchItem[] = fastItems.slice(0, limit);
-  if (mode === "deep" || (mode === "auto" && shouldEscalate(query, fastItems, Math.min(5, limit)) )) {
-    escalated = mode === "auto";
-    const { items: deepItems, diag } = await bingPlaywrightSearch(query, Math.max(limit, 5));
-    diagnostics.push(diag);
-    enginesUsed.push("bing_playwright");
-    finalItems = mergeDedupe([deepItems, fastItems], limit);
-    return { items: finalItems, modeUsed: mode === "deep" ? "deep" : "auto", enginesUsed, escalated, diagnostics };
+  if (mode === "deep") {
+    items = await deepSearchWithPlaywright(query, limit, process.env.LANG_DEFAULT);
+    enginesUsed = ["bing_pw"];
+    return {
+      items,
+      modeUsed: "deep",
+      enginesUsed,
+      escalated: false,
+      diagnostics: { deepCount: items.length }
+    };
   }
 
-  return { items: finalItems, modeUsed: "auto", enginesUsed, escalated, diagnostics };
+  // AUTO: fast → (nếu cần) deep, rồi merge
+  const fast = await ddgHtmlSearch(query, limit, process.env.LANG_DEFAULT);
+  enginesUsed.push("ddg_html");
+
+  if (shouldEscalate(fast, limit)) {
+    escalated = true;
+    let deep: SearchItem[] = [];
+    try {
+      deep = await deepSearchWithPlaywright(query, limit, process.env.LANG_DEFAULT);
+      enginesUsed.push("bing_pw");
+    } catch {
+      // deep unavailable → trả fast
+      return {
+        items: fast,
+        modeUsed: "auto",
+        enginesUsed,
+        escalated,
+        diagnostics: { fastCount: fast.length, timeBudgetMs: FAST_TIME_BUDGET_MS }
+      };
+    }
+
+    const merged = mergeDedupe([fast, deep], limit);
+    return {
+      items: merged,
+      modeUsed: "auto",
+      enginesUsed,
+      escalated,
+      diagnostics: { fastCount: fast.length, deepCount: deep.length, timeBudgetMs: FAST_TIME_BUDGET_MS }
+    };
+  }
+
+  // fast đủ tốt → dùng luôn
+  return {
+    items: fast,
+    modeUsed: "auto",
+    enginesUsed,
+    escalated: false,
+    diagnostics: { fastCount: fast.length, timeBudgetMs: FAST_TIME_BUDGET_MS }
+  };
 }
-
-// Graceful close when process exits (optional)
-process.on("exit", async () => {
-  // no-op; Playwright contexts auto-close with process
-});
