@@ -66,11 +66,11 @@ Mở LM Studio → **Tools** → bật **mcp-web-calc**.
 - **Output:** `{ items[], modeUsed, enginesUsed[], escalated, diagnostics[] }`
 - **Gợi ý:** để `auto` cho đa số trường hợp; dùng `deep` khi bạn cần kết quả phong phú hơn ngay từ đầu.
 
-### 2) `wikipedia_search`
+### 2) `wiki_get`
 - **Mục đích:** tìm bài & lấy phần tóm tắt theo nhiều ngôn ngữ (không cần key).  
 - **Ví dụ:**
 ```json
-{ "query": "cá", "languages": ["vi","en"], "limit": 3 }
+{ "title": "Trí tuệ nhân tạo", "lang": "vi" }
 ```
 
 ### 3) `fetch_url`
