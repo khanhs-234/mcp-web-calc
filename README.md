@@ -100,7 +100,7 @@ Mở LM Studio → **Tools** → bật **mcp-web-calc**.
 
 ## Khắc phục sự cố
 - **CAPTCHA / chặn tạm thời**: giảm tần suất tìm, dùng `mode="fast"` hoặc thử lại sau vài phút.
-- **Linux thiếu lib**: dùng `npx 
+- **Linux thiếu lib**: dùng `npx` 
 - **Timeout khi tóm tắt URL**: trang quá nặng hoặc chặn; thử `fetch_url` trước, hoặc tăng `HTTP_TIMEOUT`.
 
 ## Giấy phép
