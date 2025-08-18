@@ -110,7 +110,7 @@ server.registerTool(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("mcp-web-calc ready (stdio)…");
+  console.error("mcp-universal-tools-auto ready (stdio)…");
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
