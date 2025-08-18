@@ -68,7 +68,7 @@ server.registerTool(
     inputSchema: { url: z.string().url(), bullets: z.number().int().min(3).max(10).default(5).optional(), language: z.string().default("auto").optional() }
   },
   async ({ url, bullets = 5, language = "auto" }) => {
-    const doc = await fetchAndExtract(url);
+    const doc = await fetchAndExtract(url, language === "auto" ? undefined : language);
     const prompt = `Hãy tóm tắt nội dung dưới đây thành ${bullets} gạch đầu dòng.
 - Ngôn ngữ đầu ra: ${language}
 - Giữ các ý chính, con số quan trọng, loại bỏ rườm rà.
