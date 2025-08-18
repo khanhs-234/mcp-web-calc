@@ -1,11 +1,16 @@
 # mcp-web-calc (không dùng API, tìm nhanh → đào sâu)
 
+## Tools
+
+- `search_web` — Tìm web (nhanh/sâu, không cần API key)
+- `fetch_url` — Tải & trích xuất nội dung URL / PDF
+- `summarize_url` — Tóm tắt nội dung bằng Readability
+- `math_eval` — Tính toán (BigNumber/Fraction chính xác cao)
+- `wiki_get` — Lấy tóm tắt 1 trang Wikipedia: `{"title":"...", "lang":"vi"}`
+
+
 MCP server cho LM Studio với 5 công cụ — **tìm web** + **Wikipedia** + **trích xuất URL** + **tóm tắt** + **máy tính chính xác**.
-- **Tìm web hai tầng**: Nhanh bằng **DuckDuckGo HTML**, cần sâu sẽ chuyển sang **Playwright (Bing)**.  
-- **Wikipedia đa ngôn ngữ**: Lấy kết quả và phần tóm tắt theo nhiều ngôn ngữ.  
-- **Trích xuất URL**: Lấy nội dung đã làm sạch từ HTML/PDF.  
-- **Tóm tắt URL**: Nhờ model cục bộ trong LM Studio tóm tắt.  
-- **Tính toán chính xác**: BigNumber/Fraction để tránh lỗi số chấm động.
+- **Tìm web hai tầng**: Nhanh bằng **DuckDuckGo HTML**, nếu cần sẽ chuyển sang **Playwright (Bing)**. Không cần API key.
 
 > Không dùng API key. Không cần Docker.
 
@@ -15,8 +20,7 @@ MCP server cho LM Studio với 5 công cụ — **tìm web** + **Wikipedia** + *
 # Cài phụ thuộc
 npm i   # hoặc: pnpm i / yarn
 
-# Cài Chromium cho Playwright (Windows/Mac/Linux)
-npx playwright install chromium
+npx 
 
 # Dev
 npm run dev
@@ -56,11 +60,8 @@ Mở LM Studio → **Tools** → bật **mcp-web-calc**.
 ## Công cụ & cách dùng
 
 ### 1) `search_web`
-- **Mục đích:** tìm web hai tầng (nhanh → sâu).  
+- **Mục đích:** tìm web một tầng (nhanh → sâu).  
 - **Chế độ:**
-  - `mode="auto"` (mặc định): thử **nhanh (DDG HTML)**; nếu chưa đủ tốt thì **đào sâu (Playwright Bing)**.
-  - `mode="fast"`: chỉ DDG HTML (không dùng Playwright).
-  - `mode="deep"`: vào Playwright ngay.
 - **Input:** `{ query, mode?, limit?, language?, timeBudgetMs? }`
 - **Output:** `{ items[], modeUsed, enginesUsed[], escalated, diagnostics[] }`
 - **Gợi ý:** để `auto` cho đa số trường hợp; dùng `deep` khi bạn cần kết quả phong phú hơn ngay từ đầu.
@@ -95,13 +96,11 @@ Mở LM Studio → **Tools** → bật **mcp-web-calc**.
 
 ## Lưu ý vận hành
 - Tôn trọng robots/TOS; không gửi quá nhiều truy vấn trong thời gian ngắn.  
-- Playwright được tối ưu để nhẹ: chặn ảnh/phông/media; chỉ bật khi cần.  
 - Nếu gặp CAPTCHA, giảm tần suất hoặc thử lại sau vài phút.
 
 ## Khắc phục sự cố
-- **Playwright báo thiếu Chromium**: chạy `npx playwright install chromium`.
 - **CAPTCHA / chặn tạm thời**: giảm tần suất tìm, dùng `mode="fast"` hoặc thử lại sau vài phút.
-- **Linux thiếu lib**: dùng `npx playwright install --with-deps chromium`.
+- **Linux thiếu lib**: dùng `npx 
 - **Timeout khi tóm tắt URL**: trang quá nặng hoặc chặn; thử `fetch_url` trước, hoặc tăng `HTTP_TIMEOUT`.
 
 ## Giấy phép
