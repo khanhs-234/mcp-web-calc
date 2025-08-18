@@ -5,6 +5,11 @@ import { runTwoTierSearch, type EngineName } from "./engines.js";
 import { fetchAndExtract } from "./extract.js";
 import { evaluateExpression } from "./math.js";
 
+const toInt = (v: string | undefined, def: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : def;
+};
+const DEFAULT_LIMIT = toInt(process.env.MAX_RESULTS, 10);
 const server = new McpServer({ name: "mcp-web-calc", version: "0.2.0" });
 
 // 1) search_web (two-tier: fast -> deep)
@@ -15,13 +20,13 @@ server.registerTool(
     description: "Mặc định chạy nhanh bằng DuckDuckGo HTML; nếu kết quả chưa đủ tốt sẽ chuyển sang Playwright (Bing). Không dùng API key.",
     inputSchema: {
       q: z.string(),
-      limit: z.number().int().min(1).max(50).default(10).optional(),
+      limit: z.number().int().min(1).max(50).default(DEFAULT_LIMIT).optional(),
       lang: z.string().default("vi").optional(),
       mode: z.enum(["fast","deep","auto"]).default("auto").optional()
     }
   },
-  async ({ q, limit = 10, lang = "vi", mode = "auto" }) => {
-    const res = await runTwoTierSearch({ q, limit, lang, mode });
+  async ({ q, limit = DEFAULT_LIMIT, lang = "vi", mode = "auto" }) => {
+    const res = await runTwoTierSearch({ q, limit: Math.min(Math.max(1, limit), 50), lang, mode });
     const payload = { ...res, items: res.items.slice(0, limit) };
     return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
   }
