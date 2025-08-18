@@ -104,8 +104,7 @@ export async function ddgHtmlSearch(
 export async function deepSearchWithPlaywright(
   query: string,
   num = MAX_RESULTS,
-  lang?: string,
-  timeBudgetMs?: number
+  lang?: string
 ): Promise<SearchItem[]> {
   let chromium: any;
   try {
@@ -122,10 +121,7 @@ export async function deepSearchWithPlaywright(
     const u = new URL("https://www.bing.com/search");
     u.searchParams.set("q", query);
     if (lang) u.searchParams.set("setLang", lang);
-    await page.goto(u.toString(), {
-      waitUntil: "domcontentloaded",
-      timeout: Math.min(timeBudgetMs ?? HTTP_TIMEOUT, HTTP_TIMEOUT),
-    });
+    await page.goto(u.toString(), { waitUntil: "domcontentloaded", timeout: HTTP_TIMEOUT });
     await sleep(200);
 
     const items: SearchItem[] = await page.evaluate((limit: number) => {
@@ -194,7 +190,6 @@ export interface SearchReport {
   diagnostics: {
     fastCount?: number;
     deepCount?: number;
-    language?: string;
     timeBudgetMs?: number;
   };
 }
@@ -203,54 +198,49 @@ export interface SearchReport {
 export async function runTwoTierSearch(
   query: string,
   mode: SearchMode = "auto",
-  limit: number = MAX_RESULTS,
-  lang?: string,
-  timeBudgetMs?: number
+  limit: number = MAX_RESULTS
 ): Promise<SearchReport> {
   let enginesUsed: EngineName[] = [];
   let items: SearchItem[] = [];
   let escalated = false;
-
-  const language = lang ?? process.env.LANG_DEFAULT;
-  const budget = timeBudgetMs ?? FAST_TIME_BUDGET_MS;
 
   if (!query || !query.trim()) {
     return { items: [], modeUsed: mode, enginesUsed: [], escalated: false, diagnostics: {} };
   }
 
   if (mode === "fast") {
-    items = await ddgHtmlSearch(query, limit, language, budget);
+    items = await ddgHtmlSearch(query, limit, process.env.LANG_DEFAULT);
     enginesUsed = ["ddg_html"];
     return {
       items,
       modeUsed: "fast",
       enginesUsed,
       escalated: false,
-      diagnostics: { fastCount: items.length, language, timeBudgetMs: budget }
+      diagnostics: { fastCount: items.length, timeBudgetMs: FAST_TIME_BUDGET_MS }
     };
   }
 
   if (mode === "deep") {
-    items = await deepSearchWithPlaywright(query, limit, language, budget);
+    items = await deepSearchWithPlaywright(query, limit, process.env.LANG_DEFAULT);
     enginesUsed = ["bing_pw"];
     return {
       items,
       modeUsed: "deep",
       enginesUsed,
       escalated: false,
-      diagnostics: { deepCount: items.length, language, timeBudgetMs: budget }
+      diagnostics: { deepCount: items.length }
     };
   }
 
   // AUTO: fast → (nếu cần) deep, rồi merge
-  const fast = await ddgHtmlSearch(query, limit, language, budget);
+  const fast = await ddgHtmlSearch(query, limit, process.env.LANG_DEFAULT);
   enginesUsed.push("ddg_html");
 
   if (shouldEscalate(fast, limit)) {
     escalated = true;
     let deep: SearchItem[] = [];
     try {
-      deep = await deepSearchWithPlaywright(query, limit, language, budget);
+      deep = await deepSearchWithPlaywright(query, limit, process.env.LANG_DEFAULT);
       enginesUsed.push("bing_pw");
     } catch {
       // deep unavailable → trả fast
@@ -259,7 +249,7 @@ export async function runTwoTierSearch(
         modeUsed: "auto",
         enginesUsed,
         escalated,
-        diagnostics: { fastCount: fast.length, language, timeBudgetMs: budget }
+        diagnostics: { fastCount: fast.length, timeBudgetMs: FAST_TIME_BUDGET_MS }
       };
     }
 
@@ -269,7 +259,7 @@ export async function runTwoTierSearch(
       modeUsed: "auto",
       enginesUsed,
       escalated,
-      diagnostics: { fastCount: fast.length, deepCount: deep.length, language, timeBudgetMs: budget }
+      diagnostics: { fastCount: fast.length, deepCount: deep.length, timeBudgetMs: FAST_TIME_BUDGET_MS }
     };
   }
 
@@ -279,6 +269,6 @@ export async function runTwoTierSearch(
     modeUsed: "auto",
     enginesUsed,
     escalated: false,
-    diagnostics: { fastCount: fast.length, language, timeBudgetMs: budget }
+    diagnostics: { fastCount: fast.length, timeBudgetMs: FAST_TIME_BUDGET_MS }
   };
 }

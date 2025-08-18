@@ -22,14 +22,8 @@ server.registerTool(
       timeBudgetMs: z.number().int().min(500).max(10000).default(Number(process.env.FAST_TIME_BUDGET_MS || 1800)).optional()
     }
   },
-  async ({
-    query,
-    mode = "auto",
-    limit = Number(process.env.MAX_RESULTS || 5),
-    language = process.env.LANG_DEFAULT || "vi",
-    timeBudgetMs = Number(process.env.FAST_TIME_BUDGET_MS || 1800),
-  }) => {
-    const res = await runTwoTierSearch(query, mode, limit, language, timeBudgetMs);
+  async ({ query, mode = "auto", limit = Number(process.env.MAX_RESULTS || 5) }) => {
+    const res = await runTwoTierSearch(query, mode, limit);
     const payload = {
       items: res.items,
       modeUsed: res.modeUsed,
