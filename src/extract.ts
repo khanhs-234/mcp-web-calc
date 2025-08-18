@@ -1,22 +1,18 @@
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 
-const LANG_DEFAULT = process.env.LANG_DEFAULT || "vi";
-
-function uaHeaders(lang: string = LANG_DEFAULT) {
+function uaHeaders() {
   const ua = process.env.USER_AGENT || "mcp-universal-tools/0.1";
-  // Accept-Language communicates preferred languages to servers,
-  // using a weighted list that falls back to English.
-  const accept = `${lang}-${lang.toUpperCase()},${lang};q=0.9,en;q=0.8`;
-  return { "User-Agent": ua, "Accept-Language": accept } as Record<string, string>;
+  const lang = process.env.LANG_DEFAULT || "vi";
+  return { "User-Agent": ua, "Accept-Language": lang === "vi" ? "vi-VN,vi;q=0.9,en;q=0.8" : "en-US,en;q=0.9" } as Record<string, string>;
 }
 
 export interface ExtractedDoc {
   title?: string; byline?: string; siteName?: string; lang?: string; text: string; url: string; length?: number;
 }
 
-export async function fetchAndExtract(url: string, lang: string = LANG_DEFAULT): Promise<ExtractedDoc> {
-  const res = await fetch(url, { redirect: "follow", headers: uaHeaders(lang) });
+export async function fetchAndExtract(url: string): Promise<ExtractedDoc> {
+  const res = await fetch(url, { redirect: "follow", headers: uaHeaders() });
   if (!res.ok) throw new Error(`Fetch ${res.status} for ${url}`);
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("pdf")) {
