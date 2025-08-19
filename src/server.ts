@@ -105,6 +105,7 @@ server.registerTool(
     const summary = await wikiGetSummary(title, lang);
     return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
   }
+);
 
 // 6) wiki_multi â€” láº¥y nhiá»u ngĂ´n ngá»¯ & tá»•ng há»£p
 server.registerTool(
@@ -116,15 +117,13 @@ server.registerTool(
       term: z.string(),
       baseLang: z.string().default("vi").optional(),
       langs: z.array(z.string()).default(["vi","en"]).optional()
-    }
+    },
   },
   async ({ term, baseLang = "vi", langs = ["vi","en"] }) => {
     const { wikiGetMultiSummary } = await import("./wikipedia.js");
     const out = await wikiGetMultiSummary(term, baseLang, langs);
     return { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] };
   }
-);
-
 );
 
 async function main() {
