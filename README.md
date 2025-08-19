@@ -1,11 +1,14 @@
 # mcp-web-calc — MCP server cho LM Studio (không cần API key)
 
-**5 công cụ tích hợp**
+**Phiên bản:** 0.3.0
+
+**6 công cụ tích hợp**
 - `search_web` — Tìm web hai tầng (Nhanh: DuckDuckGo HTML → Sâu: Playwright/Bing)
 - `fetch_url` — Tải & trích xuất nội dung từ URL/HTML/PDF (Readability + pdf-parse)
 - `summarize_url` — Lấy nội dung từ URL rồi tóm tắt ngắn gọn
 - `math_eval` — Máy tính chính xác (Number / BigNumber / Fraction)
 - `wiki_get` — Lấy tóm tắt 1 trang Wikipedia theo ngôn ngữ
+- `wiki_multi` — Lấy tóm tắt Wikipedia theo **nhiều ngôn ngữ** trong một lần gọi
 
 > Không dùng API key. Hoạt động hoàn toàn qua MCP/stdio.
 
@@ -29,7 +32,7 @@ npm run build && npm run start
 ## Biến môi trường (khuyến nghị)
 Đặt trong LM Studio hoặc `.env`:
 ```env
-USER_AGENT=mcp-web-calc/0.2 (https://local)
+USER_AGENT=mcp-web-calc/0.3 (https://local)
 HTTP_TIMEOUT=15000       # ms cho mọi yêu cầu mạng
 MAX_RESULTS=10           # mặc định cho search_web
 LANG_DEFAULT=vi          # ngôn ngữ mặc định
@@ -43,10 +46,10 @@ MAX_BYTES=20971520       # giới hạn tải 20MB cho fetch_url
 ## Thêm MCP server trong LM Studio
 **Settings → Developer → Model Context Protocol (MCP) Servers → Add**
 
-- **Name**: `mcp-web-calc`  
-- **Command**: `npm`  
-- **Args**: `run`, `dev`  *(hoặc `start` nếu đã build)*  
-- **Working directory**: đường dẫn tới thư mục dự án  
+- **Name**: `mcp-web-calc`
+- **Command**: `npm`
+- **Args**: `run`, `dev`  *(hoặc `start` nếu đã build)*
+- **Working directory**: đường dẫn tới thư mục dự án
 - **Environment variables**: như ở phần trên
 
 Khi chạy thành công, log sẽ hiện: `mcp-web-calc ready (stdio)…`
@@ -75,15 +78,10 @@ Khi chạy thành công, log sẽ hiện: `mcp-web-calc ready (stdio)…`
   diagnostics?: Record<string, unknown>;
 }
 ```
-- **Ví dụ prompt trong chat LM Studio**
+- **Ví dụ**
 ```
-Dùng tool search_web với q="Node.js LTS release schedule", mode="fast", limit=5, lang="vi".
+search_web: { "q": "Node.js LTS release schedule", "mode": "fast", "limit": 5, "lang": "vi" }
 ```
-```
-Tìm web (auto) về "hệ toạ độ barycentric trong đồ hoạ 3D", limit=5, lang="vi".
-```
-
-> Gặp CAPTCHA? Hãy giảm tần suất hoặc dùng `mode="fast"` tạm thời.
 
 ---
 
@@ -106,12 +104,8 @@ Tìm web (auto) về "hệ toạ độ barycentric trong đồ hoạ 3D", limit=
 ```
 - **Ví dụ**
 ```
-Dùng tool fetch_url với url="https://example.com"
+fetch_url: { "url": "https://example.com" }
 ```
-```
-fetch_url: url="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
-```
-> Nếu URL bị chặn do SSRF (localhost/loopback), bạn sẽ thấy báo lỗi tương ứng.
 
 ---
 
@@ -123,10 +117,9 @@ fetch_url: url="https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/du
 - **Hành vi**
   - Lấy nội dung bằng `fetch_url`, sau đó *thử* gọi model phía server (nếu được LM Studio cấp) để tóm tắt ngắn gọn tiếng Việt.
   - **Fallback**: nếu không gọi được model, trả về tối đa ~2000 ký tự đầu của bài.
-
 - **Ví dụ**
 ```
-Dùng tool summarize_url với url="https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API"
+summarize_url: { "url": "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API" }
 ```
 
 ---
@@ -145,17 +138,8 @@ Dùng tool summarize_url với url="https://developer.mozilla.org/en-US/docs/Web
   - Cần lượng giác? Dùng `mode="number"` để có sin/cos… chính xác kiểu số JS.
 - **Ví dụ**
 ```
-math_eval: expression="derivative(sin(x)*exp(x), x)", mode="number"
+math_eval: { "expression": "derivative(sin(x)*exp(x), x)", "mode": "number" }
 ```
-```
-math_eval: expression="simplify((x^2 - 1)/(x - 1))", mode="number"
-```
-```
-math_eval: expression="0.1 + 0.2", mode="BigNumber", precision=64
-```
-
-> Muốn xấp xỉ tích phân: dùng tổng Riemann, ví dụ  
-> `sum(map(range(0, 10000), k -> sin(k*pi/10000)^2)) * (pi/10000)` với `mode="number"`.
 
 ---
 
@@ -170,18 +154,44 @@ math_eval: expression="0.1 + 0.2", mode="BigNumber", precision=64
 ```
 - **Ví dụ**
 ```
-wiki_get: title="Việt Nam", lang="vi"
+wiki_get: { "title": "Việt Nam", "lang": "vi" }
+```
+
+---
+
+### 6) `wiki_multi`
+- **Input**
+```ts
+{
+  term: string,                 // thuật ngữ gốc, ví dụ "Cá"
+  baseLang?: string,            // mặc định "vi"
+  langs?: string[]              // mặc định ["vi","en"]
+}
+```
+- **Output (rút gọn)**
+```ts
+{
+  baseLang: string;
+  base: { /* WikiSummary của baseLang */ };
+  items: Record<string, WikiSummary | null>; // null nếu không tìm thấy
+  resolved: Record<string, { title?: string; source: "base"|"langlinks"|"direct"|"none" }>
+}
+```
+- **Ví dụ**
+```
+wiki_multi: { "term": "Cá", "baseLang": "vi", "langs": ["vi","en","ja","fr"] }
 ```
 
 ---
 
 ## Mẹo kiểm thử nhanh
 ```text
-search_web: q="site:developer.apple.com App Intents", mode="deep", limit=5, lang="vi"
-fetch_url: url="https://example.com"
-summarize_url: url="https://www.python.org/dev/peps/pep-0008/"
-math_eval: expression="inv([[1,2],[3,4]])", mode="number"
-wiki_get: title="Lambda calculus", lang="en"
+search_web: { "q": "site:developer.apple.com App Intents", "mode": "deep", "limit": 5, "lang": "vi" }
+fetch_url: { "url": "https://example.com" }
+summarize_url: { "url": "https://www.python.org/dev/peps/pep-0008/" }
+math_eval: { "expression": "inv([[1,2],[3,4]])", "mode": "number" }
+wiki_get: { "title": "Lambda calculus", "lang": "en" }
+wiki_multi: { "term": "Cá", "baseLang": "vi", "langs": ["vi","en","ja","fr"] }
 ```
 
 ---

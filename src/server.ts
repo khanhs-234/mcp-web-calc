@@ -1,4 +1,4 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+﻿import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { runTwoTierSearch, type EngineName } from "./engines.js";
@@ -10,14 +10,14 @@ const toInt = (v: string | undefined, def: number) => {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : def;
 };
 const DEFAULT_LIMIT = toInt(process.env.MAX_RESULTS, 10);
-const server = new McpServer({ name: "mcp-web-calc", version: "0.2.0" });
+const server = new McpServer({ name: "mcp-web-calc", version: "0.3.0" });
 
 // 1) search_web (two-tier: fast -> deep)
 server.registerTool(
   "search_web",
   {
-    title: "Tìm web (Nhanh: DuckDuckGo, Sâu: Playwright/Bing)",
-    description: "Mặc định chạy nhanh bằng DuckDuckGo HTML; nếu kết quả chưa đủ tốt sẽ chuyển sang Playwright (Bing). Không dùng API key.",
+    title: "TĂ¬m web (Nhanh: DuckDuckGo, SĂ¢u: Playwright/Bing)",
+    description: "Máº·c Ä‘á»‹nh cháº¡y nhanh báº±ng DuckDuckGo HTML; náº¿u káº¿t quáº£ chÆ°a Ä‘á»§ tá»‘t sáº½ chuyá»ƒn sang Playwright (Bing). KhĂ´ng dĂ¹ng API key.",
     inputSchema: {
       q: z.string(),
       limit: z.number().int().min(1).max(50).default(DEFAULT_LIMIT).optional(),
@@ -36,8 +36,8 @@ server.registerTool(
 server.registerTool(
   "fetch_url",
   {
-    title: "Tải & trích xuất URL",
-    description: "Tải nội dung một URL (HTML/PDF) và trích xuất text bằng Readability/pdf-parse.",
+    title: "Táº£i & trĂ­ch xuáº¥t URL",
+    description: "Táº£i ná»™i dung má»™t URL (HTML/PDF) vĂ  trĂ­ch xuáº¥t text báº±ng Readability/pdf-parse.",
     inputSchema: { url: z.string().url() }
   },
   async ({ url }) => {
@@ -46,30 +46,30 @@ server.registerTool(
   }
 );
 
-// 3) summarize_url — dùng host LLM (qua MCP) nếu có, fallback trả văn bản rút gọn
+// 3) summarize_url â€” dĂ¹ng host LLM (qua MCP) náº¿u cĂ³, fallback tráº£ vÄƒn báº£n rĂºt gá»n
 server.registerTool(
   "summarize_url",
   {
-    title: "Tóm tắt URL",
-    description: "Lấy nội dung từ URL và tóm tắt ngắn gọn.",
+    title: "TĂ³m táº¯t URL",
+    description: "Láº¥y ná»™i dung tá»« URL vĂ  tĂ³m táº¯t ngáº¯n gá»n.",
     inputSchema: { url: z.string().url() }
   },
   async ({ url }) => {
     const doc = await fetchAndExtract(url);
-    // Thử dùng server-side model nếu có
+    // Thá»­ dĂ¹ng server-side model náº¿u cĂ³
     try {
-      const prompt = `Tóm tắt ngắn gọn (tiếng Việt) nội dung sau (<= 10 câu):\n\nTiêu đề: ${doc.title || "(không có)"}\nURL: ${doc.url}\n\n--- Nội dung ---\n${doc.text.slice(0, 12000)}`;
+      const prompt = `TĂ³m táº¯t ngáº¯n gá»n (tiáº¿ng Viá»‡t) ná»™i dung sau (<= 10 cĂ¢u):\n\nTiĂªu Ä‘á»: ${doc.title || "(khĂ´ng cĂ³)"}\nURL: ${doc.url}\n\n--- Ná»™i dung ---\n${doc.text.slice(0, 12000)}`;
       // @ts-ignore - McpServer has .server.createMessage in LM Studio environment
       const resp = await (server as any).server.createMessage({
         messages: [{ role: "user", content: { type: "text", text: prompt } }],
         maxTokens: 800
       });
-      const text = resp.content && resp.content.type === "text" ? resp.content.text : "(không tạo được tóm tắt)";
+      const text = resp.content && resp.content.type === "text" ? resp.content.text : "(khĂ´ng táº¡o Ä‘Æ°á»£c tĂ³m táº¯t)";
       return { content: [{ type: "text", text }] };
     } catch {
-      // Fallback: trả 2k ký tự đầu
+      // Fallback: tráº£ 2k kĂ½ tá»± Ä‘áº§u
       const fallback = (doc.text || "").slice(0, 2000);
-      return { content: [{ type: "text", text: fallback || "(không có nội dung để tóm tắt)" }] };
+      return { content: [{ type: "text", text: fallback || "(khĂ´ng cĂ³ ná»™i dung Ä‘á»ƒ tĂ³m táº¯t)" }] };
     }
   }
 );
@@ -78,8 +78,8 @@ server.registerTool(
 server.registerTool(
   "math_eval",
   {
-    title: "Tính toán (độ chính xác cao)",
-    description: "Đánh giá biểu thức với BigNumber hoặc Fraction để tránh lỗi số chấm động.",
+    title: "TĂ­nh toĂ¡n (Ä‘á»™ chĂ­nh xĂ¡c cao)",
+    description: "ÄĂ¡nh giĂ¡ biá»ƒu thá»©c vá»›i BigNumber hoáº·c Fraction Ä‘á»ƒ trĂ¡nh lá»—i sá»‘ cháº¥m Ä‘á»™ng.",
     inputSchema: {
       expression: z.string(),
       mode: z.enum(["number","BigNumber","Fraction"]).default("BigNumber").optional(),
@@ -96,8 +96,8 @@ server.registerTool(
 server.registerTool(
   "wiki_get",
   {
-    title: "Wikipedia: lấy tóm tắt",
-    description: "Lấy tóm tắt cho một tiêu đề Wikipedia. Hỗ trợ lang (mặc định: vi).",
+    title: "Wikipedia: láº¥y tĂ³m táº¯t",
+    description: "Láº¥y tĂ³m táº¯t cho má»™t tiĂªu Ä‘á» Wikipedia. Há»— trá»£ lang (máº·c Ä‘á»‹nh: vi).",
     inputSchema: { title: z.string(), lang: z.string().default("vi").optional() }
   },
   async ({ title, lang = "vi" }) => {
@@ -105,12 +105,33 @@ server.registerTool(
     const summary = await wikiGetSummary(title, lang);
     return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
   }
+
+// 6) wiki_multi â€” láº¥y nhiá»u ngĂ´n ngá»¯ & tá»•ng há»£p
+server.registerTool(
+  "wiki_multi",
+  {
+    title: "Wikipedia: Ä‘a ngĂ´n ngá»¯ (nhiá»u lang)",
+    description: "Nháº­p term, baseLang (máº·c Ä‘á»‹nh 'vi') vĂ  danh sĂ¡ch langs cáº§n láº¥y tĂ³m táº¯t. Æ¯u tiĂªn langlinks Ä‘á»ƒ map tiĂªu Ä‘á» chĂ­nh xĂ¡c.",
+    inputSchema: {
+      term: z.string(),
+      baseLang: z.string().default("vi").optional(),
+      langs: z.array(z.string()).default(["vi","en"]).optional()
+    }
+  },
+  async ({ term, baseLang = "vi", langs = ["vi","en"] }) => {
+    const { wikiGetMultiSummary } = await import("./wikipedia.js");
+    const out = await wikiGetMultiSummary(term, baseLang, langs);
+    return { content: [{ type: "text", text: JSON.stringify(out, null, 2) }] };
+  }
+);
+
 );
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("mcp-web-calc ready (stdio)…");
+  console.error("mcp-web-calc ready (stdio)â€¦");
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
+
