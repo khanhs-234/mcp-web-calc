@@ -120,7 +120,11 @@ async function bingPlaywrightSearch(q: string, limit: number, lang: string): Pro
 
 export async function runTwoTierSearch(opts: { q: string; limit?: number; lang?: string; mode?: SearchMode; timeoutMs?: number }): Promise<SearchResponse> {
   const { q } = opts;
-  const limit = Math.max(1, Math.min(Number(opts.limit ?? Number(process.env.MAX_RESULTS) || 10), 50));
+  const limit = Math.max(
+    1,
+    Math.min(Number(opts.limit ?? (Number(process.env.MAX_RESULTS) || 10)), 50)
+  );
+
   const lang = opts.lang ?? (process.env.LANG_DEFAULT || "vi");
   const mode = opts.mode ?? "auto";
 
