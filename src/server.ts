@@ -64,12 +64,12 @@ server.registerTool(
         messages: [{ role: "user", content: { type: "text", text: prompt } }],
         maxTokens: 800
       });
-      const text = resp.content && resp.content.type === "text" ? resp.content.text : "(khĂ´ng táº¡o Ä‘Æ°á»£c tĂ³m táº¯t)";
+      const text = resp.content && resp.content.type === "text" ? resp.content.text : "(không tạo được tóm tắt)";
       return { content: [{ type: "text", text }] };
     } catch {
       // Fallback: trả 2k ký tự đầu
       const fallback = (doc.text || "").slice(0, 2000);
-      return { content: [{ type: "text", text: fallback || "(khĂ´ng cĂ³ ná»™i dung Ä‘á»ƒ tĂ³m táº¯t)" }] };
+      return { content: [{ type: "text", text: fallback || "(không có nội dung để tóm tắt)" }] };
     }
   }
 );
@@ -129,7 +129,7 @@ server.registerTool(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("mcp-web-calc ready (stdio)â€¦");
+  console.error("mcp-web-calc ready (stdio)…");
 }
 
 main().catch(err => { console.error(err); process.exit(1); });
